@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Статистика Браузеров</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f2f2f2; }
+        h1 { color: #333; }
+        table { border-collapse: collapse; width: 400px; background: white; }
+        td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #eee; }
+        button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>📊 Статистика</h1>
+    <table>
+        <tr><th>Параметр</th><th>Значение</th></tr>
+        <tr><td>🧩 Активных окон</td><td id="browsers">...</td></tr>
+        <tr><td>🔁 Циклов</td><td id="cycles">...</td></tr>
+        <tr><td>🎬 Реклам</td><td id="ads">...</td></tr>
+        <tr><td>♻️ Перезагрузок</td><td id="reloads">...</td></tr>
+        <tr><td>💰 Прибыль</td><td id="income">...</td></tr>
+    </table>
+    <button onclick="resetStats()">🧹 Сбросить статистику</button>
+
+    <script>
+        async function fetchStats() {
+            const res = await fetch('/summary');
+            const data = await res.json();
+            document.getElementById('browsers').textContent = data.total_browsers;
+            document.getElementById('cycles').textContent = data.total_cycles;
+            document.getElementById('ads').textContent = data.total_ads;
+            document.getElementById('reloads').textContent = data.total_reloads;
+            document.getElementById('income').textContent = ((data.total_ads / 1000) * 150).toFixed(2) + '₽';
+        }
+
+        async function resetStats() {
+            await fetch('/reset', { method: 'POST' });
+            setTimeout(fetchStats, 1000);
+        }
+
+        fetchStats();
+        setInterval(fetchStats, 10000);
+    </script>
+</body>
+</html>
