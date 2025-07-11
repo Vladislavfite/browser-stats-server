@@ -1,11 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import json
 import time
 import threading
 import os
 import requests
 
-from flask import render_template
 app = Flask(__name__, template_folder='templates')
 
 DATA_FILE = "stats.json"
@@ -16,18 +15,15 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 stats_lock = threading.Lock()
 
-
 def load_stats():
     if not os.path.exists(DATA_FILE):
         return {}
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-
 def save_stats(stats):
     with open(DATA_FILE, "w") as f:
         json.dump(stats, f)
-
 
 def summarize_stats(stats):
     summary = {
@@ -38,6 +34,43 @@ def summarize_stats(stats):
     }
     return summary
 
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/stats", methods=["POST"])
+def receive_stats():
+    data = request.json
+    if not data or "bot_id" not in data:
+        return "Invalid", 400
+
+    with stats_lock:
+        stats = load_stats()
+        stats[data["bot_id"]] = data
+        save_stats(stats)
+    return "OK", 200
+
+@app.route("/summary", methods=["GET"])
+def get_summary():
+    with stats_lock:
+        stats = load_stats()
+        summary = summarize_stats(stats)
+    return jsonify(summary)
+
+@app.route("/reset", methods=["POST"])
+def reset_stats():
+    with stats_lock:
+        save_stats({})
+        with open(RESET_FLAG_FILE, "w") as f:
+            f.write("reset")
+    return "Reset OK", 200
+
+@app.route("/should_reset", methods=["GET"])
+def should_reset():
+    if os.path.exists(RESET_FLAG_FILE):
+        os.remove(RESET_FLAG_FILE)
+        return jsonify({"reset": True})
+    return jsonify({"reset": False})
 
 def send_telegram_summary():
     while True:
@@ -60,52 +93,11 @@ def send_telegram_summary():
 
         if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
-
-
-@app.route("/stats", methods=["POST"])
-def receive_stats():
-    data = request.json
-    if not data or "bot_id" not in data:
-        return "Invalid", 400
-
-    with stats_lock:
-        stats = load_stats()
-        stats[data["bot_id"]] = data
-        save_stats(stats)
-    return "OK", 200
-
-
-@app.route("/summary", methods=["GET"])
-def get_summary():
-    with stats_lock:
-        stats = load_stats()
-        summary = summarize_stats(stats)
-    return jsonify(summary)
-
-
-@app.route("/reset", methods=["POST"])
-def reset_stats():
-    with stats_lock:
-        save_stats({})
-        with open(RESET_FLAG_FILE, "w") as f:
-            f.write("reset")
-    return "Reset OK", 200
-
-
-@app.route("/should_reset", methods=["GET"])
-def should_reset():
-    if os.path.exists(RESET_FLAG_FILE):
-        os.remove(RESET_FLAG_FILE)
-        return jsonify({"reset": True})
-    return jsonify({"reset": False})
-
+            try:
+                requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+            except:
+                pass
 
 if __name__ == "__main__":
     threading.Thread(target=send_telegram_summary, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
