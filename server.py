@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 import json
 import time
 import threading
@@ -6,6 +7,7 @@ import os
 import requests
 
 app = Flask(__name__, template_folder='templates')
+CORS(app)
 
 DATA_FILE = "stats.json"
 RESET_FLAG_FILE = "reset.flag"
@@ -34,9 +36,28 @@ def summarize_stats(stats):
     }
     return summary
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+def send_telegram_summary():
+    while True:
+        time.sleep(SEND_INTERVAL)
+        with stats_lock:
+            stats = load_stats()
+            summary = summarize_stats(stats)
+
+        ad_count = summary["total_ads"]
+        income = (ad_count / 1000) * 150
+
+        message = (
+            "📊 Статистика за последний час:\n"
+            f"🧩 Активных окон: {summary['total_browsers']}\n"
+            f"🔁 Циклов: {summary['total_cycles']}\n"
+            f"🎬 Реклам: {summary['total_ads']}\n"
+            f"♻️ Перезагрузок: {summary['total_reloads']}\n"
+            f"💰 Прибыль: {income:.2f}₽"
+        )
+
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
 
 @app.route("/stats", methods=["POST"])
 def receive_stats():
@@ -72,31 +93,9 @@ def should_reset():
         return jsonify({"reset": True})
     return jsonify({"reset": False})
 
-def send_telegram_summary():
-    while True:
-        time.sleep(SEND_INTERVAL)
-        with stats_lock:
-            stats = load_stats()
-            summary = summarize_stats(stats)
-
-        ad_count = summary["total_ads"]
-        income = (ad_count / 1000) * 150
-
-        message = (
-            "📊 Статистика за последний час:\n"
-            f"🧩 Активных окон: {summary['total_browsers']}\n"
-            f"🔁 Циклов: {summary['total_cycles']}\n"
-            f"🎬 Реклам: {summary['total_ads']}\n"
-            f"♻️ Перезагрузок: {summary['total_reloads']}\n"
-            f"💰 Прибыль: {income:.2f}₽"
-        )
-
-        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            try:
-                requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
-            except:
-                pass
+@app.route("/")
+def index():
+    return render_template("index.html")
 
 if __name__ == "__main__":
     threading.Thread(target=send_telegram_summary, daemon=True).start()
