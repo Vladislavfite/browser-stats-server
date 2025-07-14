@@ -10,8 +10,9 @@ import requests
 app = Flask(__name__, template_folder='templates')
 CORS(app)
 
-DATA_FILE = "stats.json"
-RESET_FLAG_FILE = "reset.flag"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, "stats.json")
+RESET_FLAG_FILE = os.path.join(BASE_DIR, "reset.flag")
 SEND_INTERVAL = int(os.environ.get("SEND_INTERVAL", 3600))
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
