@@ -109,3 +109,7 @@ def should_reset():
         os.remove(RESET_FLAG_FILE)
         return jsonify({"reset": True})
     return jsonify({"reset": False})
+if __name__ == "__main__":
+    threading.Thread(target=send_telegram_summary, daemon=True).start()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
