@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import json
@@ -7,12 +6,13 @@ import threading
 import os
 import requests
 
-app = Flask(__name__, template_folder='templates')
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+
+app = Flask(__name__, template_folder=TEMPLATES_DIR)
 CORS(app)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, "stats.json")
-RESET_FLAG_FILE = os.path.join(BASE_DIR, "reset.flag")
+DATA_FILE = "stats.json"
+RESET_FLAG_FILE = "reset.flag"
 SEND_INTERVAL = int(os.environ.get("SEND_INTERVAL", 3600))
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -109,7 +109,12 @@ def should_reset():
         os.remove(RESET_FLAG_FILE)
         return jsonify({"reset": True})
     return jsonify({"reset": False})
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
 if __name__ == "__main__":
     threading.Thread(target=send_telegram_summary, daemon=True).start()
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
