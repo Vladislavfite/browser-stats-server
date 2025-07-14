@@ -15,8 +15,17 @@ RESET_FLAG_FILE = "reset.flag"
 SEND_INTERVAL = int(os.environ.get("SEND_INTERVAL", 3600))
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+ACTIVE_TIMEOUT = int(os.environ.get("ACTIVE_TIMEOUT", 60))
 
 stats_lock = threading.Lock()
+
+def remove_stale_bots(stats):
+    """Remove bots that haven't reported in a while."""
+    cutoff = time.time() - ACTIVE_TIMEOUT
+    stale = [bid for bid, bot in stats.items() if bot.get("last_seen", 0) < cutoff]
+    for bid in stale:
+        stats.pop(bid, None)
+    return stats
 
 def load_stats():
     if not os.path.exists(DATA_FILE):
@@ -29,11 +38,14 @@ def save_stats(stats):
         json.dump(stats, f)
 
 def summarize_stats(stats):
+    cutoff = time.time() - ACTIVE_TIMEOUT
+    active_bots = [bot for bot in stats.values() if bot.get("last_seen", 0) >= cutoff]
+
     summary = {
-        "total_browsers": len(stats),
-        "total_cycles": sum(bot.get("cycles", 0) for bot in stats.values()),
-        "total_ads": sum(bot.get("ads", 0) for bot in stats.values()),
-        "total_reloads": sum(bot.get("reloads", 0) for bot in stats.values())
+        "total_browsers": len(active_bots),
+        "total_cycles": sum(bot.get("cycles", 0) for bot in active_bots),
+        "total_ads": sum(bot.get("ads", 0) for bot in active_bots),
+        "total_reloads": sum(bot.get("reloads", 0) for bot in active_bots)
     }
     return summary
 
@@ -66,9 +78,12 @@ def receive_stats():
     if not data or "bot_id" not in data:
         return "Invalid", 400
 
+    data["last_seen"] = int(time.time())
+
     with stats_lock:
         stats = load_stats()
         stats[data["bot_id"]] = data
+        stats = remove_stale_bots(stats)
         save_stats(stats)
     return "OK", 200
 
@@ -93,11 +108,3 @@ def should_reset():
         os.remove(RESET_FLAG_FILE)
         return jsonify({"reset": True})
     return jsonify({"reset": False})
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-if __name__ == "__main__":
-    threading.Thread(target=send_telegram_summary, daemon=True).start()
-    app.run(host="0.0.0.0", port=10000)
