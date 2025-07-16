@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+
 from flask_cors import CORS
 import json
 import time
@@ -24,13 +24,13 @@ ACTIVE_TIMEOUT = int(os.environ.get("ACTIVE_TIMEOUT", 60))
 
 stats_lock = threading.Lock()
 
+history = {}
+
+
 def remove_stale_bots(stats):
-    """Remove bots that haven't reported in a while."""
-    cutoff = time.time() - ACTIVE_TIMEOUT
-    stale = [bid for bid, bot in stats.items() if bot.get("last_seen", 0) < cutoff]
-    for bid in stale:
-        stats.pop(bid, None)
+    """(Deprecated) Previously removed stale bots."""
     return stats
+
 
 def load_stats():
     try:
@@ -47,6 +47,7 @@ def load_stats():
         print(f"Error loading stats: {e}")
         return {}
 
+
 def save_stats(stats):
     try:
         with open(LOCK_FILE, "w") as lock:
@@ -57,9 +58,13 @@ def save_stats(stats):
     except Exception as e:
         print(f"Error saving stats: {e}")
 
+
 def summarize_stats(stats):
     cutoff = time.time() - ACTIVE_TIMEOUT
-    active_bots = [bot for bot in stats.values() if bot.get("last_seen", 0) >= cutoff]
+    active_bots = [
+        bot for bot in stats.values()
+        if bot.get("last_seen", 0) >= cutoff
+    ]
 
     summary = {
         "total_browsers": len(active_bots),
@@ -68,6 +73,7 @@ def summarize_stats(stats):
         "total_reloads": sum(bot.get("reloads", 0) for bot in active_bots)
     }
     return summary
+
 
 def send_telegram_summary():
     while True:
@@ -91,24 +97,47 @@ def send_telegram_summary():
         if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
             try:
-                requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+                requests.post(
+                    url,
+                    data={"chat_id": TELEGRAM_CHAT_ID, "text": message},
+                )
             except Exception as e:
                 print(f"Error sending telegram message: {e}")
 
+
 @app.route("/stats", methods=["POST"])
 def receive_stats():
-    data = request.json
-    if not data or "bot_id" not in data:
+    data = request.json or {}
+    device_id = data.get("device_id") or data.get("bot_id")
+    if not device_id:
         return "Invalid", 400
 
-    data["last_seen"] = int(time.time())
+    now = int(time.time())
 
     with stats_lock:
         stats = load_stats()
-        stats[data["bot_id"]] = data
-        stats = remove_stale_bots(stats)
+        current = stats.get(device_id, {})
+        prev_ads = current.get("ads", 0)
+        new_ads = data.get("ads", prev_ads)
+
+        # update activity time if ads count changed
+        if new_ads != prev_ads:
+            current["last_active"] = now
+            diff = max(0, new_ads - prev_ads)
+        else:
+            diff = 0
+
+        current.update(data)
+        current["last_seen"] = now
+        stats[device_id] = current
         save_stats(stats)
+
+        if diff:
+            minute = now - (now % 60)
+            history[minute] = history.get(minute, 0) + diff
+
     return "OK", 200
+
 
 @app.route("/summary", methods=["GET"])
 def get_summary():
@@ -116,6 +145,42 @@ def get_summary():
         stats = load_stats()
         summary = summarize_stats(stats)
     return jsonify(summary)
+
+
+@app.route("/dashboard_data", methods=["GET"])
+def dashboard_data():
+    with stats_lock:
+        stats = load_stats()
+        now = int(time.time())
+        devices = []
+        for did, d in stats.items():
+            name = d.get("device_name") or d.get("name") or did
+            last_seen = d.get("last_seen", 0)
+            last_active = d.get("last_active", last_seen)
+            ads = d.get("ads", 0)
+            status = "online" if now - last_active <= 300 else "offline"
+            devices.append({
+                "name": name,
+                "id": did,
+                "ads": ads,
+                "last_seen": last_seen,
+                "status": status
+            })
+        active = sum(1 for dev in devices if dev["status"] == "online")
+        inactive = len(devices) - active
+        hist = [
+            {"time": ts, "ads": ads}
+            for ts, ads in sorted(history.items())
+        ]
+    return jsonify(
+        {
+            "devices": devices,
+            "active": active,
+            "inactive": inactive,
+            "history": hist,
+        }
+    )
+
 
 @app.route("/reset", methods=["POST"])
 def reset_stats():
@@ -128,6 +193,7 @@ def reset_stats():
             print(f"Error writing reset flag: {e}")
     return "Reset OK", 200
 
+
 @app.route("/should_reset", methods=["GET"])
 def should_reset():
     try:
@@ -138,9 +204,11 @@ def should_reset():
         print(f"Error checking reset flag: {e}")
     return jsonify({"reset": False})
 
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
 
 summary_lock_handle = None
 
