@@ -186,6 +186,7 @@ def dashboard_data():
 def reset_stats():
     with stats_lock:
         save_stats({})
+        history.clear()
         try:
             with open(RESET_FLAG_FILE, "w") as f:
                 f.write("reset")
@@ -220,5 +221,5 @@ except BlockingIOError:
     print("Summary thread already running in another process")
 
 if __name__ == "__main__":
-    # не запускаем app.run() — gunicorn сам это сделает
-    pass
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
