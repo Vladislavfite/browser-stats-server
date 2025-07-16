@@ -5,14 +5,18 @@ import time
 import threading
 import os
 import requests
+import fcntl
 
-TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
 
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
 CORS(app)
 
-DATA_FILE = "stats.json"
-RESET_FLAG_FILE = "reset.flag"
+DATA_FILE = os.path.join(BASE_DIR, "stats.json")
+RESET_FLAG_FILE = os.path.join(BASE_DIR, "reset.flag")
+LOCK_FILE = os.path.join(BASE_DIR, "stats.lock")
+SUMMARY_LOCK_FILE = os.path.join(BASE_DIR, "summary.lock")
 SEND_INTERVAL = int(os.environ.get("SEND_INTERVAL", 3600))
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -29,14 +33,29 @@ def remove_stale_bots(stats):
     return stats
 
 def load_stats():
-    if not os.path.exists(DATA_FILE):
+    try:
+        with open(LOCK_FILE, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if not os.path.exists(DATA_FILE):
+                data = {}
+            else:
+                with open(DATA_FILE, "r") as f:
+                    data = json.load(f)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+        return data
+    except Exception as e:
+        print(f"Error loading stats: {e}")
         return {}
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
 
 def save_stats(stats):
-    with open(DATA_FILE, "w") as f:
-        json.dump(stats, f)
+    try:
+        with open(LOCK_FILE, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            with open(DATA_FILE, "w") as f:
+                json.dump(stats, f)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    except Exception as e:
+        print(f"Error saving stats: {e}")
 
 def summarize_stats(stats):
     cutoff = time.time() - ACTIVE_TIMEOUT
@@ -71,7 +90,10 @@ def send_telegram_summary():
 
         if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+            try:
+                requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+            except Exception as e:
+                print(f"Error sending telegram message: {e}")
 
 @app.route("/stats", methods=["POST"])
 def receive_stats():
@@ -99,23 +121,36 @@ def get_summary():
 def reset_stats():
     with stats_lock:
         save_stats({})
-        with open(RESET_FLAG_FILE, "w") as f:
-            f.write("reset")
+        try:
+            with open(RESET_FLAG_FILE, "w") as f:
+                f.write("reset")
+        except Exception as e:
+            print(f"Error writing reset flag: {e}")
     return "Reset OK", 200
 
 @app.route("/should_reset", methods=["GET"])
 def should_reset():
-    if os.path.exists(RESET_FLAG_FILE):
-        os.remove(RESET_FLAG_FILE)
-        return jsonify({"reset": True})
+    try:
+        if os.path.exists(RESET_FLAG_FILE):
+            os.remove(RESET_FLAG_FILE)
+            return jsonify({"reset": True})
+    except Exception as e:
+        print(f"Error checking reset flag: {e}")
     return jsonify({"reset": False})
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+summary_lock_handle = None
+
 if __name__ == "__main__":
-    threading.Thread(target=send_telegram_summary, daemon=True).start()
+    try:
+        summary_lock_handle = open(SUMMARY_LOCK_FILE, "w")
+        fcntl.flock(summary_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        threading.Thread(target=send_telegram_summary, daemon=True).start()
+    except BlockingIOError:
+        print("Summary thread already running in another process")
     # не запускаем app.run() — gunicorn сам это сделает
 
 # if __name__ == "__main__":
