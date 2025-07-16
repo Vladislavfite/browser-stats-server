@@ -3,5 +3,5 @@ services:
     name: browser-stats-server
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python server.py"
+    startCommand: "gunicorn server:app"
     autoDeploy: true
