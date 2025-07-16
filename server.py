@@ -121,14 +121,15 @@ def receive_stats():
         stats = load_stats()
         current = stats.get(device_id, {})
         prev_ads = current.get("ads", 0)
+        prev_reloads = current.get("reloads", 0)
         new_ads = data.get("ads", prev_ads)
+        new_reloads = data.get("reloads", prev_reloads)
 
-        # update activity time if ads count changed
-        if new_ads != prev_ads:
+        # update activity time if ads or reloads count changed
+        if new_ads != prev_ads or new_reloads != prev_reloads:
             current["last_active"] = now
-            diff = max(0, new_ads - prev_ads)
-        else:
-            diff = 0
+
+        diff = max(0, new_ads - prev_ads)
 
         current.update(data)
         current["last_seen"] = now
@@ -156,16 +157,20 @@ def dashboard_data():
         stats = load_stats()
         now = int(time.time())
         devices = []
+        total_ads = 0
         for did, d in stats.items():
             name = d.get("device_name") or d.get("name") or did
             last_seen = d.get("last_seen", 0)
             last_active = d.get("last_active", last_seen)
             ads = d.get("ads", 0)
+            reloads = d.get("reloads", 0)
+            total_ads += ads
             status = "online" if now - last_active <= 300 else "offline"
             devices.append({
                 "name": name,
                 "id": did,
                 "ads": ads,
+                "reloads": reloads,
                 "last_seen": last_seen,
                 "status": status
             })
@@ -175,15 +180,17 @@ def dashboard_data():
             {"time": ts, "ads": ads}
             for ts, ads in sorted(history.items())
         ]
+        income = (total_ads / 1000) * 150
     return jsonify(
         {
             "devices": devices,
             "active": active,
             "inactive": inactive,
             "history": hist,
+            "total_ads": total_ads,
+            "income": income,
         }
     )
-
 
 @app.route("/reset", methods=["POST"])
 def reset_stats():
