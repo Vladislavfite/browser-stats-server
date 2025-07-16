@@ -144,16 +144,13 @@ def index():
 
 summary_lock_handle = None
 
-if __name__ == "__main__":
-    try:
-        summary_lock_handle = open(SUMMARY_LOCK_FILE, "w")
-        fcntl.flock(summary_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        threading.Thread(target=send_telegram_summary, daemon=True).start()
-    except BlockingIOError:
-        print("Summary thread already running in another process")
-    # не запускаем app.run() — gunicorn сам это сделает
+try:
+    summary_lock_handle = open(SUMMARY_LOCK_FILE, "w")
+    fcntl.flock(summary_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    threading.Thread(target=send_telegram_summary, daemon=True).start()
+except BlockingIOError:
+    print("Summary thread already running in another process")
 
-# if __name__ == "__main__":
-   # threading.Thread(target=send_telegram_summary, daemon=True).start()
-   # port = int(os.environ.get("PORT", 10000))
-   # app.run(host="0.0.0.0", port=port)
+if __name__ == "__main__":
+    # не запускаем app.run() — gunicorn сам это сделает
+    pass
