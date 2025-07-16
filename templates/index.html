@@ -2,46 +2,76 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Статистика Браузеров</title>
+    <title>Статистика расширений</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background: #f2f2f2; }
         h1 { color: #333; }
-        table { border-collapse: collapse; width: 400px; background: white; }
+        table { border-collapse: collapse; width: 100%; background: white; margin-bottom: 10px; }
         td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
         th { background-color: #eee; }
+        #counts { margin-bottom: 20px; font-weight: bold; }
         button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
+        canvas { background: #fff; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>📊 Статистика</h1>
+    <h1>📊 Статистика расширений</h1>
+    <p>Ссылка для расширения: <span id="serverLink"></span></p>
     <table>
-        <tr><th>Параметр</th><th>Значение</th></tr>
-        <tr><td>🧩 Активных окон</td><td id="browsers">...</td></tr>
-        <tr><td>🔁 Циклов</td><td id="cycles">...</td></tr>
-        <tr><td>🎬 Реклам</td><td id="ads">...</td></tr>
-        <tr><td>♻️ Перезагрузок</td><td id="reloads">...</td></tr>
-        <tr><td>💰 Прибыль</td><td id="income">...</td></tr>
+        <thead>
+            <tr>
+                <th>Имя устройства</th>
+                <th>ID</th>
+                <th>Количество рекламы</th>
+                <th>Последнее обновление</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody id="devices-body"></tbody>
     </table>
+    <div id="counts"></div>
+    <canvas id="adsChart" height="200"></canvas>
     <button onclick="resetStats()">🧹 Сбросить статистику</button>
 
     <script>
-        async function fetchStats() {
-            const res = await fetch('/summary');
+        const ctx = document.getElementById('adsChart').getContext('2d');
+        const adsChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: 'Реклама', data: [], borderColor: 'blue', fill: false }] },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+
+        async function fetchDashboard() {
+            const res = await fetch('/dashboard_data');
             const data = await res.json();
-            document.getElementById('browsers').textContent = data.total_browsers;
-            document.getElementById('cycles').textContent = data.total_cycles;
-            document.getElementById('ads').textContent = data.total_ads;
-            document.getElementById('reloads').textContent = data.total_reloads;
-            document.getElementById('income').textContent = ((data.total_ads / 1000) * 150).toFixed(2) + '₽';
+
+            const tbody = document.getElementById('devices-body');
+            tbody.innerHTML = '';
+            data.devices.forEach(dev => {
+                const tr = document.createElement('tr');
+                const date = new Date(dev.last_seen * 1000).toLocaleTimeString();
+                const status = dev.status === 'online' ? '🟢 online' : '🔴 offline';
+                tr.innerHTML = `<td>${dev.name}</td><td>${dev.id}</td><td>${dev.ads}</td><td>${date}</td><td>${status}</td>`;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('counts').textContent = `Активных: ${data.active} / Неактивных: ${data.inactive}`;
+
+            const labels = data.history.map(p => new Date(p.time * 1000).toLocaleTimeString());
+            const values = data.history.map(p => p.ads);
+            adsChart.data.labels = labels;
+            adsChart.data.datasets[0].data = values;
+            adsChart.update();
         }
 
         async function resetStats() {
             await fetch('/reset', { method: 'POST' });
-            setTimeout(fetchStats, 1000);
+            setTimeout(fetchDashboard, 1000);
         }
 
-        fetchStats();
-        setInterval(fetchStats, 10000);
+        document.getElementById('serverLink').textContent = window.location.origin;
+        fetchDashboard();
+        setInterval(fetchDashboard, 10000);
     </script>
 </body>
 </html>
