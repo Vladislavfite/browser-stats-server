@@ -17,13 +17,12 @@
 </head>
 <body>
     <h1>📊 Статистика расширений</h1>
-    <p>Ссылка для расширения: <span id="serverLink"></span></p>
     <table>
         <thead>
             <tr>
                 <th>Имя устройства</th>
-                <th>ID</th>
                 <th>Количество рекламы</th>
+                <th>Перезагрузки</th>
                 <th>Последнее обновление</th>
                 <th>Статус</th>
             </tr>
@@ -31,7 +30,7 @@
         <tbody id="devices-body"></tbody>
     </table>
     <div id="counts"></div>
-    <canvas id="adsChart" height="200"></canvas>
+    <canvas id="adsChart" height="150"></canvas>
     <button onclick="resetStats()">🧹 Сбросить статистику</button>
 
     <script>
@@ -52,10 +51,11 @@
                 const tr = document.createElement('tr');
                 const date = new Date(dev.last_seen * 1000).toLocaleTimeString();
                 const status = dev.status === 'online' ? '🟢 online' : '🔴 offline';
-                tr.innerHTML = `<td>${dev.name}</td><td>${dev.id}</td><td>${dev.ads}</td><td>${date}</td><td>${status}</td>`;
+                tr.innerHTML = `<td>${dev.name}</td><td>${dev.ads}</td><td>${dev.reloads}</td><td>${date}</td><td>${status}</td>`;
                 tbody.appendChild(tr);
             });
-            document.getElementById('counts').textContent = `Активных: ${data.active} / Неактивных: ${data.inactive}`;
+            const income = data.income.toFixed(2);
+            document.getElementById('counts').textContent = `Активных: ${data.active} / Неактивных: ${data.inactive} | Просмотров: ${data.total_ads} | Доход: ${income}₽`;
 
             const labels = data.history.map(p => new Date(p.time * 1000).toLocaleTimeString());
             const values = data.history.map(p => p.ads);
@@ -69,9 +69,8 @@
             setTimeout(fetchDashboard, 1000);
         }
 
-        document.getElementById('serverLink').textContent = window.location.origin;
         fetchDashboard();
-        setInterval(fetchDashboard, 10000);
+        setInterval(fetchDashboard, 60000);
     </script>
 </body>
 </html>
