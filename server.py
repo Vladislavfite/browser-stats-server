@@ -1,4 +1,3 @@
-
 from flask_cors import CORS
 import json
 import time
@@ -40,7 +39,10 @@ def load_stats():
                 data = {}
             else:
                 with open(DATA_FILE, "r") as f:
-                    data = json.load(f)
+                    try:
+                        data = json.load(f)
+                    except json.JSONDecodeError:
+                        data = {}
             fcntl.flock(lock, fcntl.LOCK_UN)
         return data
     except Exception as e:
@@ -63,7 +65,7 @@ def summarize_stats(stats):
     cutoff = time.time() - ACTIVE_TIMEOUT
     active_bots = [
         bot for bot in stats.values()
-        if bot.get("last_seen", 0) >= cutoff
+        if bot.get("last_active", bot.get("last_seen", 0)) >= cutoff
     ]
 
     summary = {
