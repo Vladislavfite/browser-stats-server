@@ -199,7 +199,7 @@ def reset_stats():
         history.clear()
         try:
             with open(RESET_FLAG_FILE, "w") as f:
-                f.write("reset")
+                f.write(str(int(time.time())))
         except Exception as e:
             print(f"Error writing reset flag: {e}")
     return "Reset OK", 200
@@ -209,8 +209,16 @@ def reset_stats():
 def should_reset():
     try:
         if os.path.exists(RESET_FLAG_FILE):
-            os.remove(RESET_FLAG_FILE)
-            return jsonify({"reset": True})
+            with open(RESET_FLAG_FILE, "r") as f:
+                try:
+                    ts = int(f.read().strip())
+                except ValueError:
+                    ts = 0
+            if time.time() - ts <= RESET_TTL:
+                return jsonify({"reset": True})
+            else:
+                os.remove(RESET_FLAG_FILE)
+                return jsonify({"reset": False})
     except Exception as e:
         print(f"Error checking reset flag: {e}")
     return jsonify({"reset": False})
