@@ -11,17 +11,15 @@
         th { background-color: #eee; }
         #counts { margin-bottom: 20px; font-weight: bold; }
         button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
-        canvas { background: #fff; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>📊 Статистика расширений</h1>
     <table>
         <thead>
             <tr>
-                <th>Имя устройства</th>
-                <th>Количество рекламы</th>
+                <th id="nameHeader" style="cursor:pointer">Имя устройства</th>
+                <th id="adsHeader" style="cursor:pointer">Количество рекламы</th>
                 <th>Перезагрузки</th>
                 <th>Последнее обновление</th>
                 <th>Статус</th>
@@ -30,16 +28,36 @@
         <tbody id="devices-body"></tbody>
     </table>
     <div id="counts"></div>
-    <canvas id="adsChart" height="150"></canvas>
     <button onclick="resetStats()">🧹 Сбросить статистику</button>
 
     <script>
-        const ctx = document.getElementById('adsChart').getContext('2d');
-        const adsChart = new Chart(ctx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ label: 'Реклама', data: [], borderColor: 'blue', fill: false }] },
-            options: { scales: { y: { beginAtZero: true } } }
-        });
+        let sortBy = 'name';
+        let sortAsc = true;
+
+        document.getElementById('nameHeader').addEventListener('click', () => toggleSort('name'));
+        document.getElementById('adsHeader').addEventListener('click', () => toggleSort('ads'));
+
+        function toggleSort(field) {
+            if (sortBy === field) {
+                sortAsc = !sortAsc;
+            } else {
+                sortBy = field;
+                sortAsc = true;
+            }
+            fetchDashboard();
+        }
+
+        function sortDevices(devices) {
+            return devices.sort((a, b) => {
+                let x = a[sortBy];
+                let y = b[sortBy];
+                if (typeof x === 'string') x = x.toLowerCase();
+                if (typeof y === 'string') y = y.toLowerCase();
+                if (x < y) return sortAsc ? -1 : 1;
+                if (x > y) return sortAsc ? 1 : -1;
+                return 0;
+            });
+        }
 
         async function fetchDashboard() {
             const res = await fetch('/dashboard_data');
@@ -47,7 +65,8 @@
 
             const tbody = document.getElementById('devices-body');
             tbody.innerHTML = '';
-            data.devices.forEach(dev => {
+            const devices = sortDevices(data.devices.slice());
+            devices.forEach(dev => {
                 const tr = document.createElement('tr');
                 const date = new Date(dev.last_seen * 1000).toLocaleTimeString();
                 const status = dev.status === 'online' ? '🟢 online' : '🔴 offline';
@@ -57,11 +76,6 @@
             const income = data.income.toFixed(2);
             document.getElementById('counts').textContent = `Активных: ${data.active} / Неактивных: ${data.inactive} | Просмотров: ${data.total_ads} | Доход: ${income}₽`;
 
-            const labels = data.history.map(p => new Date(p.time * 1000).toLocaleTimeString());
-            const values = data.history.map(p => p.ads);
-            adsChart.data.labels = labels;
-            adsChart.data.datasets[0].data = values;
-            adsChart.update();
         }
 
         async function resetStats() {
@@ -70,7 +84,7 @@
         }
 
         fetchDashboard();
-        setInterval(fetchDashboard, 60000);
+        setInterval(fetchDashboard, 10000);
     </script>
 </body>
 </html>
