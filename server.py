@@ -21,7 +21,7 @@ SEND_INTERVAL = int(os.environ.get("SEND_INTERVAL", 3600))
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 ACTIVE_TIMEOUT = int(os.environ.get("ACTIVE_TIMEOUT", 60))
-
+RESET_TTL = int(os.environ.get("RESET_TTL", 300))
 stats_lock = threading.Lock()
 
 history = {}
