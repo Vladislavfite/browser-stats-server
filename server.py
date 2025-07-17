@@ -214,10 +214,10 @@ def should_reset():
                     ts = int(f.read().strip())
                 except ValueError:
                     ts = 0
+            os.remove(RESET_FLAG_FILE)
             if time.time() - ts <= RESET_TTL:
                 return jsonify({"reset": True})
             else:
-                os.remove(RESET_FLAG_FILE)
                 return jsonify({"reset": False})
     except Exception as e:
         print(f"Error checking reset flag: {e}")
