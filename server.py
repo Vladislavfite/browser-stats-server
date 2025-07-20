@@ -166,13 +166,15 @@ def dashboard_data():
             reloads = d.get("reloads", 0)
             total_ads += ads
             status = "online" if now - last_active <= 300 else "offline"
+            inactive_for = now - last_active if status == "offline" else 0
             devices.append({
                 "name": name,
                 "id": did,
                 "ads": ads,
                 "reloads": reloads,
                 "last_seen": last_seen,
-                "status": status
+                "status": status,
+                "inactive_for": inactive_for,
             })
         active = sum(1 for dev in devices if dev["status"] == "online")
         inactive = len(devices) - active
