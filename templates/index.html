@@ -23,6 +23,7 @@
                 <th>Перезагрузки</th>
                 <th>Последнее обновление</th>
                 <th>Статус</th>
+                <th>Неактивно</th>
             </tr>
         </thead>
         <tbody id="devices-body"></tbody>
@@ -33,6 +34,7 @@
     <script>
         let sortBy = 'name';
         let sortAsc = true;
+        const inactiveSince = {};
 
         document.getElementById('nameHeader').addEventListener('click', () => toggleSort('name'));
         document.getElementById('adsHeader').addEventListener('click', () => toggleSort('ads'));
@@ -70,12 +72,38 @@
                 const tr = document.createElement('tr');
                 const date = new Date(dev.last_seen * 1000).toLocaleTimeString();
                 const status = dev.status === 'online' ? '🟢 online' : '🔴 offline';
-                tr.innerHTML = `<td>${dev.name}</td><td>${dev.ads}</td><td>${dev.reloads}</td><td>${date}</td><td>${status}</td>`;
+                const inactiveId = `inactive-${dev.id}`;
+                tr.innerHTML = `<td>${dev.name}</td><td>${dev.ads}</td><td>${dev.reloads}</td><td>${date}</td><td>${status}</td><td id="${inactiveId}"></td>`;
                 tbody.appendChild(tr);
+
+                const cell = document.getElementById(inactiveId);
+                if (dev.status === 'offline') {
+                    inactiveSince[dev.id] = Date.now() - dev.inactive_for * 1000;
+                } else {
+                    delete inactiveSince[dev.id];
+                    if (cell) cell.textContent = '';
+                }
             });
             const income = data.income.toFixed(2);
             document.getElementById('counts').textContent = `Активных: ${data.active} / Неактивных: ${data.inactive} | Просмотров: ${data.total_ads} | Доход: ${income}₽`;
 
+        }
+
+        function formatDuration(sec) {
+            const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+            const s = Math.floor(sec % 60).toString().padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        function updateInactiveTimes() {
+            for (const [id, start] of Object.entries(inactiveSince)) {
+                const td = document.getElementById(`inactive-${id}`);
+                if (td) {
+                    const sec = Math.floor((Date.now() - start) / 1000);
+                    td.textContent = formatDuration(sec);
+                }
+            }
         }
 
         async function resetStats() {
@@ -85,6 +113,7 @@
 
         fetchDashboard();
         setInterval(fetchDashboard, 10000);
+        setInterval(updateInactiveTimes, 1000);
     </script>
 </body>
 </html>
