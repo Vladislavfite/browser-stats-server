@@ -24,6 +24,7 @@
                 <th>Последнее обновление</th>
                 <th>Статус</th>
                 <th>Неактивно</th>
+                <th></th>
             </tr>
         </thead>
         <tbody id="devices-body"></tbody>
@@ -73,7 +74,8 @@
                 const date = new Date(dev.last_seen * 1000).toLocaleTimeString();
                 const status = dev.status === 'online' ? '🟢 online' : '🔴 offline';
                 const inactiveId = `inactive-${dev.id}`;
-                tr.innerHTML = `<td>${dev.name}</td><td>${dev.ads}</td><td>${dev.reloads}</td><td>${date}</td><td>${status}</td><td id="${inactiveId}"></td>`;
+                const restartBtn = `<button onclick="restartDevice('${dev.id}')">🔄</button>`;
+                tr.innerHTML = `<td>${dev.name}</td><td>${dev.ads}</td><td>${dev.reloads}</td><td>${date}</td><td>${status}</td><td id="${inactiveId}"></td><td>${restartBtn}</td>`;
                 tbody.appendChild(tr);
 
                 const cell = document.getElementById(inactiveId);
@@ -109,6 +111,10 @@
         async function resetStats() {
             await fetch('/reset', { method: 'POST' });
             setTimeout(fetchDashboard, 1000);
+        }
+
+        async function restartDevice(id) {
+            await fetch(`/restart?device_id=${encodeURIComponent(id)}`, { method: 'POST' });
         }
 
         fetchDashboard();
