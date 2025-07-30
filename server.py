@@ -126,7 +126,7 @@ def send_telegram_summary():
             summary = summarize_stats(stats)
 
         ad_count = summary["total_ads"]
-       income = (ad_count / 1000) * 150
+        income = (ad_count / 1000) * 150
 
         message = (
             "📊 Статистика за последний час:\n"
