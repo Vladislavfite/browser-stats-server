@@ -126,8 +126,92 @@ def send_telegram_summary():
             summary = summarize_stats(stats)
 
         ad_count = summary["total_ads"]
-        income = (ad_count / 1000) * 150
-@@ -175,71 +215,131 @@ def dashboard_data():
+       income = (ad_count / 1000) * 150
+
+        message = (
+            "📊 Статистика за последний час:\n"
+            f"🧩 Активных окон: {summary['total_browsers']}\n"
+            f"🔁 Циклов: {summary['total_cycles']}\n"
+            f"🎬 Реклам: {summary['total_ads']}\n"
+            f"♻️ Перезагрузок: {summary['total_reloads']}\n"
+            f"💰 Прибыль: {income:.2f}₽"
+        )
+
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            try:
+                requests.post(
+                    url,
+                    data={"chat_id": TELEGRAM_CHAT_ID, "text": message},
+                )
+            except Exception as e:
+                print(f"Error sending telegram message: {e}")
+
+
+@app.route("/stats", methods=["POST"])
+def receive_stats():
+    data = request.json or {}
+    device_id = data.get("device_id") or data.get("bot_id")
+    if not device_id:
+        return "Invalid", 400
+
+    now = int(time.time())
+
+    with stats_lock:
+        stats = load_stats()
+        current = stats.get(device_id, {})
+        prev_ads = current.get("ads", 0)
+        prev_reloads = current.get("reloads", 0)
+        new_ads = data.get("ads", prev_ads)
+        new_reloads = data.get("reloads", prev_reloads)
+
+        # update activity time if ads or reloads count changed
+        if new_ads != prev_ads or new_reloads != prev_reloads:
+            current["last_active"] = now
+
+        diff = max(0, new_ads - prev_ads)
+
+        current.update(data)
+        current["last_seen"] = now
+        stats[device_id] = current
+        save_stats(stats)
+
+        if diff:
+            minute = now - (now % 60)
+            history[minute] = history.get(minute, 0) + diff
+
+    return "OK", 200
+
+
+@app.route("/summary", methods=["GET"])
+def get_summary():
+    with stats_lock:
+        stats = load_stats()
+        summary = summarize_stats(stats)
+    return jsonify(summary)
+
+
+@app.route("/dashboard_data", methods=["GET"])
+def dashboard_data():
+    with stats_lock:
+        stats = load_stats()
+        now = int(time.time())
+        devices = []
+        total_ads = 0
+        for did, d in stats.items():
+            name = d.get("device_name") or d.get("name") or did
+            last_seen = d.get("last_seen", 0)
+            last_active = d.get("last_active", last_seen)
+            ads = d.get("ads", 0)
+            reloads = d.get("reloads", 0)
+            total_ads += ads
+            status = "online" if now - last_active <= 300 else "offline"
+            inactive_for = now - last_active if status == "offline" else 0
+            devices.append({
+                "name": name,
+                "id": did,
+                "ads": ads,
+                "reloads": reloads,
                 "last_seen": last_seen,
                 "status": status,
                 "inactive_for": inactive_for,
